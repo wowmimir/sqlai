@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+boto3
+polars
+duckdb
+pyjwt
+cryptography
+sqlglot
+pydantic
+python-dotenv
+pydantic_settings
+requests
+redis
+python-multipart
+asyncpg
+sqlalchemy
