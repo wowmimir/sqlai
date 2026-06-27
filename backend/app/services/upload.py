@@ -10,7 +10,7 @@ class UploadedFile:
     size: int
 
 
-async def verify_upload(file: UploadFile) -> bytes:
+def verify_upload(file: UploadFile) -> bytes:
     if not file.filename:
         raise HTTPException(
             status_code=400,
@@ -24,7 +24,7 @@ async def verify_upload(file: UploadFile) -> bytes:
         )
 
 
-    file_bytes = await file.read()
+    file_bytes = file.file.read()
 
     actual_size = len(file_bytes)
 

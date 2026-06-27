@@ -1,0 +1,4 @@
+- background workers for uploads (celery)
+- IMMEDIATELY switch to a user -> projects -> datasets model rather than a user -> datasets
+- improve multiple file upload architecture (single thread concurrency)
+    - current file upload just employs fast apis 40 parallel thread executions to fire up individual threads for each file

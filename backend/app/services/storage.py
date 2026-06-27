@@ -14,7 +14,7 @@ class StorageService:
     Uses standard boto3 clients offloaded to FastAPI's internal worker thread pool.
     """
     def __init__(self)->None:
-        endpoint_url = settings.R2_ENDPOINT_URL or f"https://{settings.R2_ACCOUNT_ID}.r2.clouflarestorage.com"
+        endpoint_url = settings.R2_ENDPOINT_URL or f"https://{settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
         self.client = boto3.client(
             "s3",
@@ -74,3 +74,6 @@ class StorageService:
         except ClientError as e:
             logger.error(f"Failed to compile signature URL for object location ({object_key}): {e}")
             raise RuntimeError("Internal signature link construction failure.") from e
+
+
+storageClient = StorageService()

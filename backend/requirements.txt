@@ -12,5 +12,5 @@ pydantic_settings
 requests
 redis
 python-multipart
-asyncpg
+psycopg2-binary 
 sqlalchemy
