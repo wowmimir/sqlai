@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.middleware import upload_size_middleware
 from app.api.v1.datasets import router as datasets_router
+from app.api.v1.projects import router as projects_router
 
 from app.core.config import settings
 
@@ -28,6 +29,11 @@ app.add_middleware(
 
 app.include_router(
     datasets_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    projects_router,
     prefix="/api/v1",
 )
 

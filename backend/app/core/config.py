@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     # Clerk
     # --------------------------------------------------
     CLERK_SECRET_KEY: str
+    CLERK_JWKS_URL: str
 
     # --------------------------------------------------
     # System Configuration

@@ -15,7 +15,7 @@ async def upload_size_middleware(request: Request, call_next):
 
     if (
         request.method == "POST"
-        and request.url.path == "/api/v1/datasets/upload"
+        and "/datasets/upload" in request.url.path
     ):
         content_length = request.headers.get("content-length")
 

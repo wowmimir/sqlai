@@ -28,19 +28,19 @@ class StorageService:
 
     @staticmethod
 
-    def compile_path(user_id : str, dataset_id : str)-> str:
+    def compile_path(project_id : str, dataset_id : str)-> str:
         """
         Enforces a clean multi-tenant layout inside the bucket.
         Output template: datasets/user_123/dataset_abc.parquet
         """
-        return f"datasets/{user_id}/{dataset_id}.parquet"
+        return f"projects/{project_id}/datasets/{dataset_id}.parquet"
     
-    def upload_file_bytes(self, file_bytes: bytes, user_id: str, dataset_id: str, content_type: str = "application/octet-stream") -> str:
+    def upload_file_bytes(self, file_bytes: bytes, project_id: str, dataset_id: str, content_type: str = "application/octet-stream") -> str:
         """
         Uploads raw file byte content into the multi-tenant sandbox location.
         Returns the computed file object key path.
         """
-        object_key = self.compile_path(user_id, dataset_id)
+        object_key = self.compile_path(project_id, dataset_id)
         try:
             self.client.put_object(
                 Bucket=self.bucket_name,
@@ -55,12 +55,12 @@ class StorageService:
             raise RuntimeError("Internal object storage interface failure.")
 
 
-    def generate_presigned_url(self, user_id: str, dataset_id: str, expires_in_seconds: int = 3600) -> str:
+    def generate_presigned_url(self, project_id: str, dataset_id: str, expires_in_seconds: int = 3600) -> str:
         """
         Generates a temporary, secure access link for reading files safely.
         Defaults to an expiration limit of 1 hour (3600s).
         """
-        object_key = self.compile_path(user_id, dataset_id)
+        object_key = self.compile_path(project_id, dataset_id)
         try:
             url = self.client.generate_presigned_url(
                 "get_object",
