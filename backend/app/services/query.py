@@ -1,12 +1,10 @@
 from sqlalchemy.orm import Session
-from fastapi import Depends
-from app.database.session import get_db
-from app.database.models import Dataset, Project
-from app.core.security import get_current_user
+from app.database.models import Dataset
 import re
 import json
 import requests
 import sqlglot
+from typing import Dict
 from sqlglot import exp
 
 
@@ -268,3 +266,34 @@ def validate_sql(raw_sql: str) -> tuple[bool, exp.Expression | None, str | None]
         return (False, None, f"Root expression is {type(tree).__name__}, not SELECT.")
 
     return (False, tree, None)
+
+
+
+def substitute_table_paths(ast: exp.Expression, mapping: Dict[str, str]) -> exp.Expression:
+    replaced_tables = []
+    
+    def replace_table(node):
+        if isinstance(node, exp.Table):
+            table_name = node.this.name.lower()
+            if table_name not in mapping:
+                raise ValueError(f"Unknown table '{node.this.name}'")
+            
+            # Log which table is being replaced
+            replaced_tables.append(table_name)
+            
+            url_literal = exp.Literal.string(mapping[table_name])
+            func_node = exp.func('read_parquet', url_literal)
+            if node.alias:
+                func_node.set('alias', node.alias)
+            return func_node
+        return node
+    
+    transformed = ast.transform(replace_table)
+    
+    # Optional: log the replacements
+    if replaced_tables:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Replaced tables in SQL: {', '.join(replaced_tables)}")
+    
+    return transformed
