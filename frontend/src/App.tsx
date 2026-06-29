@@ -1,5 +1,6 @@
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 import ProjectTest from './components/ProjectTest';
+import QueryTest from './components/QueryTest';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
       <main>
         <SignedIn>
           <ProjectTest />
+          <QueryTest />
         </SignedIn>
         <SignedOut>
           <p className="p-8">Please sign in to continue.</p>
