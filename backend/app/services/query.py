@@ -4,8 +4,13 @@ import re
 import json
 import requests
 import sqlglot
-from typing import Dict
+from typing import Dict,Any
 from sqlglot import exp
+from app.services.duckdb import execute_sql_with_duckdb 
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -150,9 +155,12 @@ A valid SELECT response ends with a single semicolon. UNANSWERABLE must have no 
 {output_directive}"""
 
 
-
-
 def generate_sql(prompt: str, model: str = "nemotron-3-super:cloud", timeout: int = 120) -> str:
+
+    logger.info(f"Generating SQL with model '{model}', prompt length: {len(prompt)} chars")
+    
+    # Optional: log the first 500 chars of prompt for debugging
+    logger.debug(f"Prompt preview: {prompt[:500]}...")
 
     payload = {
         "model": model,
@@ -183,23 +191,23 @@ def generate_sql(prompt: str, model: str = "nemotron-3-super:cloud", timeout: in
     try:
         data = resp.json()
     except json.JSONDecodeError as exc:
+        logger.error(f"Ollama returned non-JSON: {resp.text[:500]}")
         raise OllamaResponseError(
             f"Ollama returned non‑JSON response (status {resp.status_code}): {resp.text[:200]}"
         ) from exc
 
     # Ollama's generate endpoint should contain a "response" key with the generated text.
     if "response" not in data:
+        logger.error(f"Ollama response missing 'response' field: {data}")
         raise OllamaResponseError(
             f"Unexpected Ollama payload missing 'response' field: {data}"
         )
 
-    # Return the raw LLM output – downstream features will clean/validate it.
-    return data["response"]
-
-
-
-
-
+    raw_response = data["response"]
+    logger.info(f"Raw LLM response length: {len(raw_response)} chars")
+    logger.debug(f"Raw LLM response: {raw_response[:500]}...")
+    
+    return raw_response
 
 def strip_markdown_fences(raw: str) -> str:
     """
@@ -223,17 +231,21 @@ def strip_markdown_fences(raw: str) -> str:
 
     return s.strip()
 
+
 def validate_sql(raw_sql: str) -> tuple[bool, exp.Expression | None, str | None]:
     """
     Returns (is_unanswerable, parsed_tree, error_message).
     Exactly one of parsed_tree or error_message is non-None when is_unanswerable is False.
     """
     if raw_sql is None:
+        logger.error("LLM returned None")
         return (False, None, "LLM returned no SQL output.")
 
     cleaned = strip_markdown_fences(raw_sql).strip()
+    logger.info(f"Cleaned SQL (first 200 chars): {cleaned[:200]}...")
 
     if not cleaned:
+        logger.error("LLM returned empty SQL after stripping fences")
         return (False, None, "LLM returned empty SQL output.")
 
     if cleaned.upper() == "UNANSWERABLE":
@@ -268,32 +280,142 @@ def validate_sql(raw_sql: str) -> tuple[bool, exp.Expression | None, str | None]
     return (False, tree, None)
 
 
+def enforce_row_limit(ast: exp.Select) -> exp.Select:
+    """
+    Ensures the AST has a LIMIT of 250 or less.
+    """
+    if ast.args.get('limit'):
+        current_limit = ast.args['limit'].args.get('expression')
+        
+        if isinstance(current_limit, exp.Literal) and current_limit.is_number:
+            limit_value = int(current_limit.name)
+            if limit_value > 250:
+                # Modify in place to avoid creating a new object
+                ast.limit(250, copy=False)
+        # If limit <= 250 or not a literal, keep as is
+        return ast
+    else:
+        # No limit exists, add one (copy=True by default)
+        return ast.limit(250)
 
 def substitute_table_paths(ast: exp.Expression, mapping: Dict[str, str]) -> exp.Expression:
+    """
+    Replace every table identifier with read_parquet(url) AS alias
+    so that column references like table.column resolve correctly.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
     replaced_tables = []
     
     def replace_table(node):
         if isinstance(node, exp.Table):
-            table_name = node.this.name.lower()
-            if table_name not in mapping:
-                raise ValueError(f"Unknown table '{node.this.name}'")
+            table_name = node.this.name
+            lookup_key = table_name.lower()
+            if lookup_key not in mapping:
+                raise ValueError(f"Unknown table '{table_name}'")
             
-            # Log which table is being replaced
-            replaced_tables.append(table_name)
+            url = mapping[lookup_key]
+            url_literal = exp.Literal.string(url)
             
-            url_literal = exp.Literal.string(mapping[table_name])
+            # Build read_parquet function call
             func_node = exp.func('read_parquet', url_literal)
+            
+            # Determine alias
+            # If the table already had an alias, use that alias's name.
+            # Otherwise, use the table name itself.
             if node.alias:
-                func_node.set('alias', node.alias)
-            return func_node
+                # node.alias is a TableAlias; extract its identifier
+                alias_identifier = node.alias.this if hasattr(node.alias, 'this') else node.alias
+            else:
+                alias_identifier = exp.Identifier(this=node.this.name, quoted=node.this.quoted)
+            
+            # Attach alias using .as_() – this returns an Alias expression
+            aliased_node = func_node.as_(alias_identifier)
+            replaced_tables.append(table_name)
+            return aliased_node
         return node
     
     transformed = ast.transform(replace_table)
-    
-    # Optional: log the replacements
     if replaced_tables:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info(f"Replaced tables in SQL: {', '.join(replaced_tables)}")
-    
     return transformed
+
+
+def compile_and_execute_query(
+    user_prompt: str,
+    project_id: str,
+    clerk_user_id: str,
+    db: Session,
+    model: str = "gemma4:31b-cloud",
+) -> Dict[str, Any]:
+    """
+    Complete end-to-end query pipeline:
+    1. Fetch project schemas
+    2. Generate SQL via LLM
+    3. Validate and secure SQL
+    4. Substitute table paths with presigned URLs
+    5. Enforce row limits
+    6. Execute with DuckDB
+    7. Return results
+
+    Returns:
+        Dict with 'columns' and 'rows' on success.
+        May raise HTTPException-compatible errors.
+    """
+    # 1. Fetch schemas for the project
+
+    logger.info(f"Starting query compilation for project {project_id}, prompt: {user_prompt[:100]}...")
+    schemas = get_project_schemas(db, project_id, clerk_user_id)
+    logger.info(f"Found {len(schemas)} datasets in project")
+
+    if not schemas:
+        raise ValueError("No datasets in this project.")
+
+    # 2. Build prompt and get raw SQL from LLM
+    final_prompt = build_prompt(user_prompt, schemas)
+    logger.info(f"Built prompt (length: {len(final_prompt)} chars)")
+    final_sql = generate_sql(final_prompt, model=model)
+
+    # 3. Validate SQL → get AST tree
+    is_unanswerable, tree, err = validate_sql(final_sql)
+    if err:
+        raise ValueError(err)
+    if is_unanswerable:
+        raise ValueError("Question cannot be answered with the available data.")
+
+    # 4. Enforce row limit
+    tree = enforce_row_limit(tree)
+
+    # 5. Build mapping: logical_name → pre‑signed URL
+    #    (import storageClient at top if not already imported)
+    from app.services.storage import storageClient
+    from app.core.config import settings
+
+    mapping = {}
+    for s in schemas:
+        url = storageClient.generate_presigned_url(
+            project_id=project_id,
+            dataset_id=s['dataset_id'],
+            expires_in_seconds=900  # 15 minutes
+        )
+        mapping[s['logical_name']] = url
+
+    # 6. Substitute table paths with read_parquet() calls
+    try:
+        transformed_ast = substitute_table_paths(tree, mapping)
+    except ValueError as e:
+        raise ValueError(f"Table substitution failed: {str(e)}")
+
+    # 7. Render final executable SQL
+    final_executable_sql = transformed_ast.sql()
+
+    # Log the final SQL (truncated for safety)
+    logger.info(f"Executable SQL generated (length: {len(final_executable_sql)} chars)")
+
+    # 8. Execute with DuckDB
+    try:
+        result = execute_sql_with_duckdb(final_executable_sql)
+        return result
+    except RuntimeError as e:
+        raise RuntimeError(f"DuckDB execution failed: {str(e)}")
+

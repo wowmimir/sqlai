@@ -4,9 +4,12 @@ import QueryTest from './components/QueryTest';
 
 function App() {
   return (
-    <div>
-      <header className="flex justify-between p-4 border-b">
-        <h1>DataChat Test Harness</h1>
+    <div className="min-h-screen bg-gray-50">
+      <header className="flex justify-between items-center p-4 border-b bg-white shadow-sm sticky top-0 z-10">
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl font-bold text-purple-600">📊 DataChat Test Harness</h1>
+          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">v2.0</span>
+        </div>
         <SignedOut>
           <SignInButton />
         </SignedOut>
@@ -14,13 +17,17 @@ function App() {
           <UserButton />
         </SignedIn>
       </header>
-      <main>
+      <main className="container mx-auto">
         <SignedIn>
-          <ProjectTest />
-          <QueryTest />
+          <div className="grid grid-cols-1 gap-8 py-8">
+            <ProjectTest />
+            <QueryTest />
+          </div>
         </SignedIn>
         <SignedOut>
-          <p className="p-8">Please sign in to continue.</p>
+          <div className="p-8 text-center">
+            <p className="text-gray-600">Please sign in to continue testing.</p>
+          </div>
         </SignedOut>
       </main>
     </div>
