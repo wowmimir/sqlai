@@ -1,7 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[3]
@@ -48,9 +47,8 @@ class Settings(BaseSettings):
     # --------------------------------------------------
     # Upstash Redis
     # --------------------------------------------------
-    UPSTASH_REDIS_REST_URL: str
-    UPSTASH_REDIS_REST_TOKEN: str
-
+    
+    UPSTASH_REDIS_URL : str
     # --------------------------------------------------
     # Clerk
     # --------------------------------------------------
@@ -73,6 +71,10 @@ class Settings(BaseSettings):
 
     DATABASE_POOL_SIZE: int =5
     DATABASE_MAX_OVERFLOW: int =10
+
+    GEMINI_API_KEY: str
+
+    REDIS_CACHE_TTL : int = 86400
 # --------------------------------------------------
 
 

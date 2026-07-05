@@ -74,6 +74,11 @@ class StorageService:
         except ClientError as e:
             logger.error(f"Failed to compile signature URL for object location ({object_key}): {e}")
             raise RuntimeError("Internal signature link construction failure.") from e
+    
+    def get_s3_uri(self, project_id: str, dataset_id: str) -> str:
+        """Return the static S3 URI for a dataset (no presigned token)."""
+        object_key = self.compile_path(project_id, dataset_id)
+        return f"s3://{self.bucket_name}/{object_key}"
 
 
 storageClient = StorageService()

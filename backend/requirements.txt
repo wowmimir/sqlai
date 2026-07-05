@@ -18,3 +18,5 @@ PyJWT
 alembic
 cachetools
 sqlglot
+pgvector
+google-genai

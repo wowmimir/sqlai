@@ -2,6 +2,7 @@ import logging
 import duckdb
 from typing import Dict, List, Any
 from duckdb import DuckDBPyConnection
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,35 @@ def _ensure_httpfs_loaded(conn: DuckDBPyConnection) -> None:
             logger.error(f"Failed to load DuckDB httpfs extension: {e}")
             raise RuntimeError("DuckDB httpfs extension could not be loaded.") from e
 
+
+def _configure_s3(conn: DuckDBPyConnection) -> None:
+    """Configure DuckDB to use S3-compatible storage (Cloudflare R2)."""
+    endpoint_url = settings.R2_ENDPOINT_URL or f"https://{settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+    # Extract hostname without protocol
+    if endpoint_url.startswith("http://"):
+        hostname = endpoint_url[7:]
+    elif endpoint_url.startswith("https://"):
+        hostname = endpoint_url[8:]
+    else:
+        hostname = endpoint_url
+
+    # Remove trailing slash if present
+    hostname = hostname.rstrip("/")
+
+    conn.execute(f"SET s3_endpoint='{hostname}'")
+    conn.execute(f"SET s3_access_key_id='{settings.R2_ACCESS_KEY_ID}'")
+    conn.execute(f"SET s3_secret_access_key='{settings.R2_SECRET_ACCESS_KEY}'")
+    conn.execute("SET s3_region='auto'")
+    conn.execute("SET s3_url_style='path'")
+
+    # Explicitly set SSL based on the original URL's scheme
+    if endpoint_url.startswith("https://"):
+        conn.execute("SET s3_use_ssl=true")
+    else:
+        conn.execute("SET s3_use_ssl=false")
+
+    logger.info("DuckDB S3 configuration applied.")
 
 def execute_sql_with_duckdb(sql: str) -> Dict[str, Any]:
     """
@@ -47,6 +77,8 @@ def execute_sql_with_duckdb(sql: str) -> Dict[str, Any]:
 
         # Ensure httpfs is loaded for reading from HTTPS URLs
         _ensure_httpfs_loaded(conn)
+
+        _configure_s3(conn)
 
         # Optional: Set memory limit to 512MB as a safeguard
         conn.execute("PRAGMA memory_limit='512MB';")

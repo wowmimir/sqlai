@@ -4,6 +4,12 @@ from app.core.middleware import upload_size_middleware
 from app.api.v1.datasets import router as datasets_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.query import router as query_router
+from app.api.v1.chat import router as chat_router
+
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(message)s")
+
 
 from app.core.config import settings
 
@@ -41,6 +47,11 @@ app.include_router(
 app.include_router(
     query_router,
     prefix="/api/v1",
+)
+
+app.include_router(
+    chat_router, 
+    prefix="/api/v1"
 )
 
 
