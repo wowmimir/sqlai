@@ -1,40 +1,29 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
-import { Button } from '@/components/ui/button';  // adjust path if needed
-import ProjectTest from './components/ProjectTest';
-import QueryTest from './components/QueryTest';
+import { AppShell } from './layouts/AppShell';
 
-function App() {
+export default function App() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="flex justify-between items-center p-4 border-b bg-white shadow-sm sticky top-0 z-10">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold text-purple-600">📊 SqlAI</h1>
-          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">v2.0</span>
+    <BrowserRouter>
+      <SignedIn>
+        <Routes>
+          <Route path="/" element={<AppShell projectId={null} />} />
+          <Route path="/project/:projectId" element={<AppShell />} />
+        </Routes>
+      </SignedIn>
+      <SignedOut>
+        <div className="h-screen w-screen flex items-center justify-center bg-slate-950">
+          <div className="text-center space-y-4">
+            <h1 className="text-3xl font-bold text-white">DataChat</h1>
+            <p className="text-slate-400">Sign in to access your workspace</p>
+            <SignInButton mode="modal">
+              <button className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition">
+                Sign In
+              </button>
+            </SignInButton>
+          </div>
         </div>
-        <SignedOut>
-          <SignInButton>
-            <Button variant="default">Sign In</Button>
-          </SignInButton>
-        </SignedOut>
-        <SignedIn>
-          <UserButton />
-        </SignedIn>
-      </header>
-      <main className="container mx-auto px-4 py-6">
-        <SignedIn>
-          <div className="grid grid-cols-1 gap-8">
-            <ProjectTest />
-            <QueryTest />
-          </div>
-        </SignedIn>
-        <SignedOut>
-          <div className="p-8 text-center">
-            <p className="text-gray-600">Please sign in to continue testing.</p>
-          </div>
-        </SignedOut>
-      </main>
-    </div>
+      </SignedOut>
+    </BrowserRouter>
   );
 }
-
-export default App;
