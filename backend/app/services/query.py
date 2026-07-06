@@ -300,79 +300,6 @@ def validate_sql(raw_sql: str) -> tuple[bool, exp.Expression | None, str | None]
 
     return (False, tree, None)
 
-def validate_and_correct_columns(ast: exp.Expression, schemas: list) -> exp.Expression:
-    """
-    Validate that all column references exist in the provided schemas.
-    Attempt to correct common mistakes (e.g., a leading underscore on column names).
-    Raises ValueError if a column cannot be resolved.
-    """
-    # Build mapping: logical_name -> set of column names (already lowercased)
-    schema_map = {s['logical_name']: set(s['schema_metadata'].keys()) for s in schemas}
-    
-    def correct_column(node):
-        if isinstance(node, exp.Column):
-            # Unqualified column: node.table is None
-            if node.table is None:
-                col_name = node.name
-                possible_tables = []
-                for logical_name, cols in schema_map.items():
-                    if col_name in cols:
-                        possible_tables.append(logical_name)
-                if len(possible_tables) == 0:
-                    # Try stripping a leading underscore
-                    if col_name.startswith('_'):
-                        corrected = col_name[1:]
-                        for logical_name, cols in schema_map.items():
-                            if corrected in cols:
-                                # Replace with corrected column name and quote if needed
-                                node.set('this', exp.Identifier(this=corrected, quoted=True))
-                                if corrected and corrected[0].isdigit():
-                                    node.this.set('quoted', True)
-                                return node
-                    raise ValueError(f"Column '{col_name}' not found in any table (tried correction).")
-                elif len(possible_tables) > 1:
-                    raise ValueError(f"Ambiguous column '{col_name}' found in tables: {possible_tables}. Please qualify.")
-                else:
-                    # Column exists; ensure quoting if starts with digit
-                    if col_name and col_name[0].isdigit():
-                        node.this.set('quoted', True)
-                    return node
-            else:
-                # Qualified column: resolve the table name
-                if isinstance(node.table, exp.Identifier):
-                    table_name = node.table.name
-                elif isinstance(node.table, exp.Table):
-                    table_name = node.table.this.name
-                else:
-                    table_name = str(node.table)
-                table_name_lower = table_name.lower()
-                matched = None
-                for logical_name in schema_map:
-                    if logical_name.lower() == table_name_lower:
-                        matched = logical_name
-                        break
-                if matched is None:
-                    raise ValueError(f"Table '{table_name}' not found in schema.")
-                cols = schema_map[matched]
-                col_name = node.name
-                if col_name not in cols:
-                    # Try stripping leading underscore
-                    if col_name.startswith('_'):
-                        corrected = col_name[1:]
-                        if corrected in cols:
-                            node.set('this', exp.Identifier(this=corrected, quoted=True))
-                            if corrected and corrected[0].isdigit():
-                                node.this.set('quoted', True)
-                            return node
-                    raise ValueError(f"Column '{col_name}' not found in table '{matched}'. Available: {cols}")
-                else:
-                    if col_name and col_name[0].isdigit():
-                        node.this.set('quoted', True)
-                    return node
-        return node
-    
-    return ast.transform(correct_column)
-
 def enforce_row_limit(ast: exp.Select) -> exp.Select:
     """
     Ensures the AST has a LIMIT of 250 or less.
@@ -432,40 +359,6 @@ def substitute_table_paths(ast: exp.Expression, mapping: Dict[str, str]) -> exp.
     if replaced_tables:
         logger.info(f"Replaced tables in SQL: {', '.join(replaced_tables)}")
     return transformed
-
-def prepare_and_finalize_sql(generic_sql: str, schemas: list, project_id: str) -> tuple[str, str]:
-    """
-    Parse, validate, correct columns, enforce LIMIT, and substitute S3 paths.
-    Returns (final_sql, corrected_generic_sql).
-    """
-    # 1. Validate SQL (returns tree or raises)
-    is_unanswerable, tree, err = validate_sql(generic_sql)
-    if err:
-        raise ValueError(err)
-    if is_unanswerable:
-        raise ValueError("Question cannot be answered with the available data.")
-    
-    # 2. Correct column references
-    tree = validate_and_correct_columns(tree, schemas)
-    
-    # 3. Enforce row limit (<= 250)
-    tree = enforce_row_limit(tree)
-    
-    # 4. Get the corrected generic SQL (without paths) for caching
-    corrected_generic_sql = tree.sql()
-    
-    # 5. Build mapping: logical_name → S3 URI
-    from app.services.storage import storageClient
-    mapping = {}
-    for s in schemas:
-        uri = storageClient.get_s3_uri(project_id, s['dataset_id'])
-        mapping[s['logical_name']] = uri
-    
-    # 6. Substitute table paths with read_parquet(...)
-    transformed = substitute_table_paths(tree, mapping)
-    final_sql = transformed.sql()
-    
-    return final_sql, corrected_generic_sql
 
 def validate_and_correct_columns(ast: exp.Expression, schemas: list) -> exp.Expression:
     """
