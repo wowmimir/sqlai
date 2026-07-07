@@ -22,6 +22,7 @@ origins = [
     "http://localhost:3000",  # Common Next.js/React dev port
     "http://localhost:5173",  # Vite default dev port
     "http://127.0.0.1:5173",
+    "https://sqlai-xi.vercel.app",
 ]
 
 
