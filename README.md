@@ -1,303 +1,195 @@
 # SqlAI
 
-**A high-performance, serverless Semantic Data Lakehouse engine for conversational analytics**
+**Chat with your data. Instant insights. No cloud warehouse required.**
 
-SqlAI is an open-source, multi-tenant analytical platform that enables natural language querying of tabular data. Built with Python/FastAPI, Polars, and DuckDB, it processes data entirely in-memory within application threads, eliminating the need for expensive cloud warehouses.
-
----
-
-## ✨ Key Features
-
-- **Natural Language to SQL** – Ask questions about your data in plain English; SqlAI generates and executes SQL queries against your datasets.
-- **Project-Aware Workspace** – Organize datasets into projects. Query across multiple tables within a project using joins, unions, and subqueries.
-- **Dual-Layer Caching** – Semantic prompt caching (pgvector) + result matrix caching (Redis) dramatically reduce latency and LLM costs.
-- **Zero-Infrastructure Cost** – Deploy entirely on free tiers (Render, Neon, Upstash, Cloudflare R2, Clerk) with predictable $0/month fixed cost.
-- **Synchronous Inline Processing** – No async queues, no background workers. The entire pipeline (ingestion, normalization, query compilation, execution) runs within the request-response loop.
-- **AST Security Guardrails** – SQL injection and data mutation attacks are blocked via `sqlglot` AST parsing before execution.
-- **Memory-Safe Execution** – Automatic `LIMIT 250` injection, 20MB upload cap, and 512MB RAM footprint guarantees.
-- **Virtualized Tabular UI** – 60fps rendering of large datasets using TanStack Table + React Virtual.
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-18+-61DAFB.svg)](https://reactjs.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
 
-## 🧠 How It Works
+## What is SqlAI?
 
-### The Write Path (Ingestion)
+SqlAI is an open-source analytics platform that lets you **upload CSV files and ask questions in plain English** — getting instant answers without writing SQL or paying for expensive cloud data warehouses.
 
-1. User uploads a `.csv` file to a project.
-2. Polars normalizes the data (lowercases columns, strips whitespace, fills nulls, casts dates).
-3. The normalized DataFrame is serialized to **Parquet** and stored in **Cloudflare R2**.
-4. Schema metadata is registered in **Neon Postgres** (`datasets` table).
-
-### The Read Path (Query Execution)
-
-1. User submits a natural language prompt for a project.
-2. **Semantic Cache Check** – Embedding similarity search (`≤ 0.04` cosine distance) returns cached SQL if available.
-3. **LLM Fallback** – On cache miss, the prompt (with project schemas) is sent to an LLM to generate SQL.
-4. **AST Guardrails** – The generated SQL is parsed; mutations (`DROP`, `DELETE`, `INSERT`) are rejected. A `LIMIT 250` is injected if absent.
-5. **Path Substitution** – Table names are replaced with DuckDB `read_parquet('s3://...')` calls pointing to R2.
-6. **Result Cache Check** – Final SQL is hashed; Redis returns cached JSON results if available.
-7. **DuckDB Execution** – On cache miss, DuckDB reads Parquet files from R2, executes the query in-memory, and returns JSON.
-8. **Dual Cache Write** – Results go to Redis; prompt → SQL mapping goes to the semantic cache (Postgres).
-9. **Chat History** – The interaction (with `redis_cache_key` pointer) is logged to `chat_messages`.
+Think of it as having a data analyst sitting next to you, ready to answer any question about your data in seconds.
 
 ---
 
-## 🏗️ Architecture Overview
+## ✨ Why SqlAI?
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                               Frontend (React + Vite)                       │
-│  ┌──────────────┐  ┌──────────────────────┐  ┌───────────────────────────┐ │
-│  │ Project       │  │ Conversational       │  │ Virtualized Data Grid    │ │
-│  │ Sidebar       │  │ Chat Panel           │  │ (TanStack + React Virtual)│ │
-│  └──────────────┘  └──────────────────────┘  └───────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          Backend (FastAPI + Polars + DuckDB)               │
-│                                                                             │
-│  ┌─────────────────┐  ┌──────────────────┐  ┌───────────────────────────┐ │
-│  │ Upload Pipeline │  │ Query Pipeline   │  │ AST Guardrails            │ │
-│  │ • Multipart CSV │  │ • Semantic Cache │  │ • sqlglot parsing         │ │
-│  │ • Polars norm.  │  │ • LLM generation │  │ • Mutation blocking       │ │
-│  │ • Parquet → R2  │  │ • Path subst.    │  │ • LIMIT 250 injection     │ │
-│  └─────────────────┘  └──────────────────┘  └───────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-              ┌───────────────────────┼───────────────────────────┐
-              ▼                       ▼                           ▼
-┌─────────────────┐      ┌─────────────────────┐      ┌─────────────────────┐
-│  Cloudflare R2  │      │  Neon Postgres      │      │  Upstash Redis      │
-│  (Parquet data) │      │  • Projects         │      │  (Result matrix     │
-│                 │      │  • Datasets (schema)│      │   cache)            │
-│                 │      │  • Semantic cache   │      │                     │
-│                 │      │  • Chat history     │      │                     │
-└─────────────────┘      └─────────────────────┘      └─────────────────────┘
-```
+### 🚀 **Instant Analytics**
+Upload a CSV, ask a question, get an answer. No waiting for queries to run, no complex setup.
+
+### 🧠 **Natural Language Queries**
+"Show me total sales by region for Q1" — and you get your answer immediately. No SQL required.
+
+### 📊 **Project Workspace**
+Group related datasets together. Upload sales data, customer lists, product catalogs — then ask questions that span all of them.
+
+### 💨 **Blazing Fast**
+Everything runs in-memory. We use Rust-accelerated engines (Polars + DuckDB) so your queries execute in milliseconds, not minutes.
+
+### 💰 **Zero Cloud Costs**
+No Snowflake. No BigQuery. No expensive warehouse bills. Just your data, processed right in the application.
+
+### 🔒 **Your Data, Your Control**
+Your files stay in your cloud storage. You own everything. Multi-tenant isolation means no one else can see your data.
 
 ---
 
-## 🧩 Core Implementation Concepts
-
-| Concept | Implementation | Why It Matters |
-| :--- | :--- | :--- |
-| **Synchronous Ingestion** | `def` endpoints + FastAPI thread pool | No async/await complexity; Polars/CPU work offloaded to thread pool, keeping event loop free |
-| **Multi-Table Query Support** | Project-scoped schemas + LLM prompt with all table definitions | Enables cross-table joins, unions, and subqueries within a project |
-| **Static S3 Paths** | `read_parquet('s3://projects/{project_id}/datasets/{table}.parquet')` | Deterministic SQL → stable Redis cache keys (unlike time-limited pre-signed URLs) |
-| **Case-Insensitive String Matching** | Prompt instructs LLM to use `LOWER(column) = LOWER('value')` | DuckDB is case-sensitive; data ingestion preserves original casing |
-| **Numeric-Leading Column Names** | Prompt instructs LLM to use `"2017_budgets"` (double quotes) | DuckDB requires quoting for identifiers starting with digits |
-| **Semantic Cache Schema Validation** | `schema_snapshot` column stores column names at cache time | Invalidates cache on schema changes (columns renamed/added/deleted) |
-| **JWT Verification Caching** | `TTLCache` with 5-minute TTL for Clerk JWKS results | Reduces network verification overhead by ~95% |
-| **Latest Dataset Resolution** | SQL subquery with `MAX(created_at)` | Picks the most recent upload when multiple versions share the same name |
-
----
-
-## 🛠️ Technology Stack
-
-| Layer | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Backend Framework** | FastAPI | RESTful API endpoints, CORS, middleware |
-| **Data Processing** | Polars | In-memory DataFrame normalization & transformation |
-| **Analytical Engine** | DuckDB | In-process SQL execution on Parquet files |
-| **SQL Security** | sqlglot | AST parsing & path substitution |
-| **Metastore** | Neon Postgres + pgvector | Projects, datasets, semantic cache (embeddings), chat history |
-| **Result Cache** | Upstash Redis | Cached query results (JSON matrix) |
-| **Object Storage** | Cloudflare R2 | Parquet file storage (zero egress fees) |
-| **Authentication** | Clerk | OAuth (Google/GitHub), JWT verification |
-| **Frontend** | React + TypeScript + Vite | UI application |
-| **UI Components** | Shadcn UI + Tailwind CSS | Styling and primitives |
-| **State Management** | Zustand | Global client state |
-| **Table Virtualization** | TanStack Table + React Virtual | High-performance data grid rendering |
-| **Deployment** | Render / Fly.io, Vercel, Neon, Upstash, Clerk | Zero-cost serverless infrastructure |
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.11+
-- Node.js 18+
-- Accounts on: [Clerk](https://clerk.com), [Neon](https://neon.tech), [Upstash](https://upstash.com), [Cloudflare R2](https://developers.cloudflare.com/r2/)
-
-### Backend Setup
+## 🎬 Quick Demo
 
 ```bash
-cd backend
+# Upload a CSV file
+Upload: sales_2026.csv
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Ask a question in plain English
+Prompt: "Show me top 5 products by revenue"
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy environment variables
-cp .env.example .env
-# Edit .env with your credentials
-
-# Run migrations (create tables in Neon)
-python scripts/init_db.py
-
-# Start the server
-uvicorn app.main:app --reload --port 8000
+# Get your answer instantly
+Result: [Product A: $45,230], [Product B: $38,100], ...
 ```
 
-### Frontend Setup
+**Try it yourself:**
 
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Copy environment variables
-cp .env.example .env.local
-# Edit .env.local with your Clerk publishable key
-
-# Start development server
-npm run dev
-```
-
-### Environment Variables
-
-**Backend (`backend/.env`):**
-
-```env
-# Server
-ENV=development
-ALLOWED_ORIGINS=http://localhost:5173
-
-# Authentication
-CLERK_SECRET_KEY=sk_live_***
-CLERK_JWKS_URL=https://api.clerk.com/v1/jwks
-
-# Database
-DATABASE_URL=postgresql://user:pass@ephemeral-neon-host.neon.tech/main?sslmode=require
-
-# Redis
-REDIS_URL=rediss://default:password@upstash-instance.upstash.io:6379
-
-# Cloudflare R2
-R2_BUCKET_NAME=your-bucket-name
-AWS_ACCESS_KEY_ID=your-r2-access-key
-AWS_SECRET_ACCESS_KEY=your-r2-secret-key
-AWS_ENDPOINT_URL=https://your-account-id.r2.cloudflarestorage.com
-AWS_REGION=auto
-```
-
-**Frontend (`frontend/.env.local`):**
-
-```env
-VITE_API_BASE_URL=http://localhost:8000
-VITE_CLERK_PUBLISHABLE_KEY=pk_live_***
-```
+1. Create a project ("Sales Q1 2026")
+2. Upload your CSV files
+3. Start asking questions
 
 ---
 
-## 📁 Project Structure
+## 💡 What Can You Build With SqlAI?
 
-```
-sqlai/
-├── backend/
-│   ├── app/
-│   │   ├── api/v1/            # Route controllers
-│   │   │   ├── projects.py    # Project CRUD
-│   │   │   ├── datasets.py    # Upload + list
-│   │   │   ├── chat.py        # Chat history
-│   │   │   └── query.py       # Query execution
-│   │   ├── core/              # Shared config & security
-│   │   │   ├── config.py
-│   │   │   ├── security.py    # Clerk JWT verification
-│   │   │   └── middleware.py
-│   │   ├── database/          # DB connections & models
-│   │   │   ├── session.py
-│   │   │   └── models.py      # SQLAlchemy models
-│   │   ├── services/          # Core processing logic
-│   │   │   ├── storage.py     # Cloudflare R2
-│   │   │   ├── dataframe.py   # Polars normalization
-│   │   │   ├── query.py       # Compiler + pipeline
-│   │   │   ├── duckdb.py      # DuckDB execution
-│   │   │   ├── embedding.py   # Text embedding
-│   │   │   ├── cache.py       # Semantic + Redis
-│   │   │   └── redis.py       # Upstash client
-│   │   └── main.py            # FastAPI entry point
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── chat/          # Chat panel + message bubbles
-│   │   │   ├── data-stage/    # Virtualized data grid
-│   │   │   ├── sidebar/       # Project sidebar (complete)
-│   │   │   └── ui/            # Shadcn primitives
-│   │   ├── layouts/
-│   │   │   ├── AppShell.tsx   # Layout + routing sync
-│   │   │   └── TopNav.tsx
-│   │   ├── lib/
-│   │   │   ├── api.ts         # Axios + token interceptor
-│   │   │   ├── endpoints.ts   # Backend URL constants
-│   │   │   ├── store.ts       # Zustand global store
-│   │   │   ├── types.ts       # TypeScript interfaces
-│   │   │   └── utils.ts
-│   │   ├── App.tsx            # Routing + Clerk
-│   │   └── main.tsx
-│   └── package.json
-└── progress.md                 # Engineering progress tracker
-```
+### Sales Dashboards
+Upload sales data, product catalogs, regional maps — ask about revenue trends, top performers, regional breakdowns.
+
+### HR Analytics
+Employee lists, department structures, salary data — find departments with high turnover, salary distributions, team compositions.
+
+### Financial Reporting
+Budget files, actuals, forecasts — compare numbers across years, calculate variances, spot trends.
+
+### Customer Insights
+Customer records, order histories, support tickets — identify your best customers, track churn, analyze satisfaction.
+
+### Personal Data Projects
+Track your spending, analyze your fitness data, explore any CSV you have lying around.
 
 ---
 
-## 🔒 Security Model
+## 🏗️ How It Works
 
-- **Authentication:** Clerk JWT verification on every endpoint (cached with 5-minute TTL).
-- **Multi-Tenancy:** All database queries are filtered by `clerk_user_id`; all storage paths include `project_id`.
-- **SQL Injection:** `sqlglot` AST parsing rejects any non-`SELECT` root expression.
-- **Resource Protection:** 20MB upload cap, automatic `LIMIT 250` injection, 512MB RAM target.
-- **No Async Queues:** All processing is synchronous and in-process, eliminating exposure of job queues.
+### 1. **Upload** → Your CSV files become queryable datasets
+- Drag & drop your files into a project
+- We handle the heavy lifting: parsing, normalizing, optimizing for fast queries
 
----
+### 2. **Ask** → Natural language → SQL
+- Type your question like you'd ask a colleague
+- Behind the scenes, we generate SQL and validate it for safety
+- You never have to write a line of SQL
 
-## 🗺️ Roadmap
-
-- **Phase 1 (Complete):** Storage foundation, synchronous ingestion, project-scoped storage.
-- **Phase 2 (Complete):** Read path execution, AST guardrails, multi-table queries, DuckDB integration.
-- **Phase 3 (Complete):** Dual-layer caching, semantic cache, result cache, chat history.
-- **Phase 4 (In Progress):** UI workspace shell, virtualized grid, project-level context switching.
-- **Phase 5 (Pending):** Productionization, Docker containerization, cold-start mitigation.
+### 3. **Explore** → Interactive data grid
+- Results appear in a snappy, virtualized table
+- Click any historical answer to rehydrate results instantly
+- Share insights with your team
 
 ---
 
-## 🤝 Contributing
+## 🛠️ Tech Stack (The TL;DR)
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
+| What | Why |
+|------|-----|
+| **FastAPI + Python** | Lightweight, fast backend |
+| **React + TypeScript** | Modern, type-safe UI |
+| **Polars** | Rust-powered data processing (it's fast) |
+| **DuckDB** | In-process analytical queries (no servers) |
+| **Clerk** | Authentication (Google/GitHub login) |
+| **Neon Postgres** | Metadata + semantic cache (`pgvector`) |
+| **Upstash Redis** | Query result caching |
+| **Cloudflare R2** | File storage (cheap, fast) |
 
-Please read `progress.md` for the current engineering status and architectural decisions.
+---
+
+## 🎯 Who Is This For?
+
+### 📊 **Analysts & Data Scientists**
+Skip the SQL boilerplate. Focus on insights, not syntax.
+
+### 🏢 **Small Teams**
+No budget for Snowflake? SqlAI gives you enterprise-like analytics for free.
+
+### 👨‍💻 **Developers**
+Build data apps without wiring up complex data pipelines. Just upload and query.
+
+### 🎓 **Students & Researchers**
+Explore datasets without learning SQL first. Ask questions naturally.
+
+---
+
+## 🌟 Key Differentiators
+
+| Feature | SqlAI | Traditional BI | Cloud Warehouses |
+|---------|-------|----------------|------------------|
+| **Natural Language Queries** | ✅ | ❌ (SQL required) | ✅ (with add-ons) |
+| **Multi-Table Joins** | ✅ | ✅ | ✅ |
+| **Instant Setup** | ✅ | ❌ (weeks of configuration) | ❌ (months of implementation) |
+| **Zero Ongoing Costs** | ✅ | ❌ (per-seat licensing) | ❌ (pay-per-query) |
+| **Your Data Stays Yours** | ✅ | ❌ (vendor lock-in) | ❌ (data in their cloud) |
+| **Open Source** | ✅ | ❌ | ❌ |
+| **Self-Hostable** | ✅ | ❌ | ❌ |
+
+---
+
+## 🏆 Built With
+
+- [FastAPI](https://fastapi.tiangolo.com/) — Modern, fast web framework
+- [Polars](https://pola.rs/) — Blazing fast DataFrame library
+- [DuckDB](https://duckdb.org/) — In-process analytical database
+- [Clerk](https://clerk.com/) — Authentication made simple
+- [Neon](https://neon.tech/) — Serverless PostgreSQL with `pgvector`
+- [Upstash](https://upstash.com/) — Serverless Redis
+- [Cloudflare R2](https://developers.cloudflare.com/r2/) — S3-compatible object storage
+- [React](https://reactjs.org/) + [TypeScript](https://www.typescriptlang.org/) — Modern frontend
+- [Zustand](https://zustand-demo.pmnd.rs/) — Simple state management
+- [TanStack Table](https://tanstack.com/table) + [React Virtual](https://tanstack.com/virtual) — Fast data grids
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+MIT License — use it anywhere, modify it freely, build on top of it.
 
 ---
 
-## 🙏 Acknowledgments
+## 🙋 FAQ
 
-- [Polars](https://pola.rs/) – Blazingly fast DataFrame library
-- [DuckDB](https://duckdb.org/) – In-process analytical database
-- [FastAPI](https://fastapi.tiangolo.com/) – Modern Python web framework
-- [Clerk](https://clerk.com) – Authentication & user management
-- [Neon](https://neon.tech) – Serverless Postgres with pgvector
-- [Upstash](https://upstash.com) – Serverless Redis
-- [Cloudflare R2](https://developers.cloudflare.com/r2/) – Object storage with zero egress
+**How is this different from ChatGPT + a CSV plugin?**
+SqlAI is purpose-built for analytics. It understands table structures, can join multiple datasets, and renders results in an interactive grid. It's also self-hostable and keeps your data private.
+
+**Do I need to know SQL?**
+Nope! Just type your question in plain English.
+
+**How many rows can I upload?**
+Up to ~100,000 rows per file (20MB limit). More than enough for most analytical use cases.
+
+**Can I query across multiple files?**
+Absolutely! Upload related datasets into a project and ask questions that reference all of them.
 
 ---
 
-## 📬 Contact
 
-For questions or feedback, please open an issue on GitHub.
+## ❤️ Support the Project
+
+If you find SqlAI useful:
+- ⭐ Star the repository
+- 🐦 Share it on social media
+- 💬 Tell your colleagues about it
+- 🍴 Fork it and build something cool
+
+---
+
+**Stop wrestling with data. Start asking questions.**
+
+Made with ❤️ for data enthusiasts everywhere.
