@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, SignInButton } from '@clerk/clerk-react';
 import { AppShell } from './layouts/AppShell';
 
 export default function App() {
@@ -7,7 +7,7 @@ export default function App() {
     <BrowserRouter>
       <SignedIn>
         <Routes>
-          <Route path="/" element={<AppShell projectId={null} />} />
+          <Route path="/" element={<AppShell />} />
           <Route path="/project/:projectId" element={<AppShell />} />
         </Routes>
       </SignedIn>

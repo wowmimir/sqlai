@@ -106,9 +106,15 @@ def get_project_schemas(db: Session, project_id: str, clerk_user_id: str) -> lis
     ]
 
 def build_prompt(user_prompt: str, schemas: list[dict]) -> str:
+    # ------------------------------------------------------------------
+    # 1. Assign a short alias to each table
+    # ------------------------------------------------------------------
+    alias_map = {s['logical_name']: f"t{idx}" for idx, s in enumerate(schemas, start=1)}
 
-    # --- Section A: System Role & Hard Rules ---
-    system_rules = """You are a SQL query compiler for DuckDB.
+    # ------------------------------------------------------------------
+    # 2. System rules – now **unconditional** qualification
+    # ------------------------------------------------------------------
+    system_rules = f"""You are a SQL query compiler for DuckDB.
 Your sole task is to translate the user's natural language question into a single valid DuckDB SELECT statement.
 
 STRICT RULES — violations are unacceptable:
@@ -118,29 +124,28 @@ STRICT RULES — violations are unacceptable:
 4. Only reference tables and columns explicitly listed in the schema catalog below.
 5. Only perform joins when the user explicitly mentions a relationship between tables, OR when two tables share an obviously matching column name (e.g., a column called user_id appearing in both). Otherwise, query a single table.
 6. If the question cannot be answered using only the provided schema, output exactly the string UNANSWERABLE and nothing else.
-7. Qualify ambiguous column names with their table name (e.g., table.column) to prevent ambiguity.
-8. Identifiers that begin with a digit (e.g., 2017_budgets) MUST be wrapped in double quotes (e.g., \"2017_budgets\"). DuckDB rejects unquoted numeric-leading identifiers.
-9. Column names that start with a digit (e.g., "2017_budgets") MUST be wrapped in double quotes.
+
+7. **CRITICAL – COLUMN QUALIFICATION**: You MUST fully qualify EVERY column reference with its table alias (e.g., t1.column_name, t2.column_name).
+   NEVER use a bare column name like `WHERE column = x` or `SELECT column`. 
+   The database will reject bare columns if they exist in multiple tables, so you must ALWAYS prefix them.
+   Use the exact aliases provided in the schema catalog below (e.g., t1, t2, etc.).
+
+8. Identifiers that begin with a digit (e.g., 2017_budgets) MUST be wrapped in double quotes (e.g., "2017_budgets"). DuckDB rejects unquoted numeric-leading identifiers.
    Use the exact column name as shown in the schema catalog. Do NOT add a leading underscore.
-   For example, if the column is "2017_budgets", reference it as "2017_budgets", not "_2017_budgets".
-10. When filtering on string columns with a value provided by the user, always perform a case‑insensitive comparison:
-   Use LOWER(column) = LOWER('value') instead of column = 'value'.
-   For example: LOWER(product_name) = LOWER('product 8')
+   For example, if the column is "2017_budgets", reference it as t1."2017_budgets".
+
+9. When filtering on string columns with a value provided by the user, always perform a case‑insensitive comparison:
+   Use LOWER(alias.column) = LOWER('value') instead of column = 'value'.
+   For example: LOWER(t1.product_name) = LOWER('product 8')  -- NOTE the alias prefix!
 """
 
-    interpreting_rules = """INTERPRETATION GUIDANCE:
-- When the user asks "what was the X for Y", interpret this as: retrieve the value(s) of the column(s) most closely matching X, filtered by the entity Y mentioned in the WHERE clause.
-- Column names are pre-normalized (lowercased, underscores instead of spaces). Match the user's intent to the closest column name — don't echo the user's literal phrasing as a column reference.
-- When the user references a value (e.g., "product 8"), match it against string columns case-insensitively. Use LOWER() if needed for safe matching.
-- Prefer selecting the value column directly over selecting the entire row unless the user asks for "all" or "everything".
-- When matching user‑provided values (like names, product IDs, etc.) against string columns, remember that the data may have different casing. Always use LOWER() to normalize both sides.
-
-"""
-
-    # --- Section B: Schema Catalog ---
+    # ------------------------------------------------------------------
+    # 3. Schema catalog – show the alias alongside the table
+    # ------------------------------------------------------------------
     schema_text = ""
     for s in schemas:
-        schema_text += f"Table: {s['logical_name']}\n"
+        alias = alias_map[s['logical_name']]
+        schema_text += f"Table: {s['logical_name']} (alias: {alias})\n"
         schema_text += f"Source: {s['display_name']}\n"
         schema_text += f"Rows: {s['row_count']}\n"
         schema_text += "Columns:\n"
@@ -151,13 +156,26 @@ STRICT RULES — violations are unacceptable:
     if not schema_text:
         schema_text += "No tables available in this project."
 
-    # --- Section C: Engine Notes ---
+    # ------------------------------------------------------------------
+    # 4. Interpretation guidance – with a concrete example
+    # ------------------------------------------------------------------
+    interpreting_rules = """INTERPRETATION GUIDANCE:
+- When the user asks "what was the X for Y", interpret this as: retrieve the value(s) of the column(s) most closely matching X, filtered by the entity Y mentioned in the WHERE clause.
+- Column names are pre-normalized (lowercased, underscores instead of spaces). Match the user's intent to the closest column name — don't echo the user's literal phrasing as a column reference.
+- When matching user‑provided values (like names, product IDs, etc.) against string columns, remember that the data may have different casing. Always use LOWER() to normalize both sides.
+- **CORRECT EXAMPLE**: If the user asks for budget of product 8, and `t1` is `_2017_budgetscsv`, write:
+  SELECT t1."2017_budgets" FROM _2017_budgetscsv t1 WHERE LOWER(t1.product_name) = LOWER('product 8');
+  Notice the `t1.` prefix on EVERY column!
+"""
+
+    # ------------------------------------------------------------------
+    # 5. Engine notes & output contract (unchanged)
+    # ------------------------------------------------------------------
     engine_notes = """DUCKDB NOTES:
 - Use || for string concatenation.
 - Date/time columns are pre-normalized to ISO format.
 - Null values have been replaced with 0 in numeric columns and empty strings in text columns."""
 
-    # --- Section D: Question + Output Contract ---
     output_directive = f"""USER QUESTION:
 {user_prompt}
 
@@ -166,7 +184,9 @@ Respond with ONLY the raw SQL string. No markdown fences. No explanation. No pre
 If the question is unanswerable with the provided schema, respond with exactly: UNANSWERABLE
 A valid SELECT response ends with a single semicolon. UNANSWERABLE must have no trailing characters."""
 
-# --- Assemble ---
+    # ------------------------------------------------------------------
+    # 6. Assemble
+    # ------------------------------------------------------------------
     return f"""{system_rules}
 
 {schema_text}
@@ -360,32 +380,35 @@ def substitute_table_paths(ast: exp.Expression, mapping: Dict[str, str]) -> exp.
         logger.info(f"Replaced tables in SQL: {', '.join(replaced_tables)}")
     return transformed
 
-def validate_and_correct_columns(ast: exp.Expression, schemas: list) -> exp.Expression:
+def validate_and_correct_columns(ast: exp.Expression, schemas: list, alias_map: dict = None) -> exp.Expression:
     """
-    Validate that all column references exist in the provided schemas.
-    Attempt to correct common mistakes (e.g., a leading underscore on column names).
+    Validate all column references exist. Resolve table aliases (t1, t2, …) if provided.
     Raises ValueError if a column cannot be resolved.
     """
-    # Build mapping: logical_name -> set of column names (already lowercased)
+    # Build mapping: logical_name -> set of columns
     schema_map = {s['logical_name']: set(s['schema_metadata'].keys()) for s in schemas}
     
+    # If alias_map is None, we assume the table name is already the logical name
+    # Build reverse map: alias -> logical_name
+    alias_to_logical = {v: k for k, v in (alias_map or {}).items()}  # e.g., {'t1': '_2017_budgetscsv'}
+
     def correct_column(node):
         if isinstance(node, exp.Column):
-            table_part = node.table
-            # If table_part is None or an empty string, treat as unqualified
-            is_empty_table = (table_part is None or 
-                              (isinstance(table_part, (str, exp.Identifier)) and str(table_part) == '') or
-                              (isinstance(table_part, exp.Table) and str(table_part.this) == ''))
+            # Skip asterisk – it means "all columns" and doesn't need validation
+            if node.name == "*":
+                return node
             
-            if is_empty_table:
-                # Unqualified column
+            table_part = node.table
+            # If no table part, treat as unqualified
+            if table_part is None or (isinstance(table_part, (str, exp.Identifier)) and str(table_part) == ''):
+                # Unqualified – try to resolve
                 col_name = node.name
-                possible_tables = []
+                possible = []
                 for logical_name, cols in schema_map.items():
                     if col_name in cols:
-                        possible_tables.append(logical_name)
-                if len(possible_tables) == 0:
-                    # Try stripping a leading underscore
+                        possible.append(logical_name)
+                if len(possible) == 0:
+                    # Try stripping leading underscore (common mistake)
                     if col_name.startswith('_'):
                         corrected = col_name[1:]
                         for logical_name, cols in schema_map.items():
@@ -394,39 +417,41 @@ def validate_and_correct_columns(ast: exp.Expression, schemas: list) -> exp.Expr
                                 if corrected and corrected[0].isdigit():
                                     node.this.set('quoted', True)
                                 return node
-                    raise ValueError(f"Column '{col_name}' not found in any table (tried correction).")
-                elif len(possible_tables) > 1:
-                    raise ValueError(f"Ambiguous column '{col_name}' found in tables: {possible_tables}. Please qualify.")
+                    raise ValueError(f"Column '{col_name}' not found in any table.")
+                elif len(possible) > 1:
+                    raise ValueError(f"Ambiguous column '{col_name}' found in tables: {possible}. Please qualify.")
                 else:
                     # Column exists; ensure quoting if starts with digit
                     if col_name and col_name[0].isdigit():
                         node.this.set('quoted', True)
                     return node
             else:
-                # Qualified column: resolve the table name
+                # Qualified column – resolve table part
                 if isinstance(table_part, exp.Identifier):
-                    table_name = table_part.name
+                    raw_name = table_part.name
                 elif isinstance(table_part, exp.Table):
-                    table_name = table_part.this.name
+                    raw_name = table_part.this.name
                 elif isinstance(table_part, str):
-                    table_name = table_part
+                    raw_name = table_part
                 else:
-                    table_name = str(table_part)
+                    raw_name = str(table_part)
                 
-                # If table_name is empty after all, treat as unqualified
-                if not table_name:
+                if not raw_name:
+                    # empty table part → treat as unqualified
                     node.set('table', None)
-                    return correct_column(node)  # Recurse as unqualified
+                    return correct_column(node)
                 
-                table_name_lower = table_name.lower()
-                matched = None
-                for logical_name in schema_map:
-                    if logical_name.lower() == table_name_lower:
-                        matched = logical_name
-                        break
-                if matched is None:
-                    raise ValueError(f"Table '{table_name}' not found in schema.")
-                cols = schema_map[matched]
+                # First, see if this is an alias we gave (t1, t2, …)
+                logical_name = alias_to_logical.get(raw_name)
+                if logical_name is None:
+                    # Not an alias, assume it's already the logical name
+                    logical_name = raw_name
+                
+                # Verify the logical table exists
+                if logical_name not in schema_map:
+                    raise ValueError(f"Table '{raw_name}' not found in schema (resolved to '{logical_name}').")
+                
+                cols = schema_map[logical_name]
                 col_name = node.name
                 if col_name not in cols:
                     # Try stripping leading underscore
@@ -437,13 +462,13 @@ def validate_and_correct_columns(ast: exp.Expression, schemas: list) -> exp.Expr
                             if corrected and corrected[0].isdigit():
                                 node.this.set('quoted', True)
                             return node
-                    raise ValueError(f"Column '{col_name}' not found in table '{matched}'. Available: {cols}")
+                    raise ValueError(f"Column '{col_name}' not found in table '{logical_name}'. Available: {cols}")
                 else:
                     if col_name and col_name[0].isdigit():
                         node.this.set('quoted', True)
                     return node
         return node
-    
+
     return ast.transform(correct_column)
 
 def prepare_and_finalize_sql(generic_sql: str, schemas: list, project_id: str) -> tuple[str, str]:
@@ -458,23 +483,26 @@ def prepare_and_finalize_sql(generic_sql: str, schemas: list, project_id: str) -
     if is_unanswerable:
         raise ValueError("Question cannot be answered with the available data.")
     
-    # 2. Correct column references
-    tree = validate_and_correct_columns(tree, schemas)
+    # 2. Build alias map: logical_name -> t1, t2, ...
+    alias_map = {s['logical_name']: f"t{idx}" for idx, s in enumerate(schemas, start=1)}
     
-    # 3. Enforce row limit (<= 250)
+    # 3. Correct column references – pass alias_map
+    tree = validate_and_correct_columns(tree, schemas, alias_map)
+    
+    # 4. Enforce row limit (<= 250)
     tree = enforce_row_limit(tree)
     
-    # 4. Get the corrected generic SQL (without paths) for caching
+    # 5. Get the corrected generic SQL (without paths) for caching
     corrected_generic_sql = tree.sql()
     
-    # 5. Build mapping: logical_name → S3 URI
+    # 6. Build mapping: logical_name → S3 URI
     from app.services.storage import storageClient
     mapping = {}
     for s in schemas:
         uri = storageClient.get_s3_uri(project_id, s['dataset_id'])
         mapping[s['logical_name']] = uri
     
-    # 6. Substitute table paths with read_parquet(...)
+    # 7. Substitute table paths with read_parquet(...)
     transformed = substitute_table_paths(tree, mapping)
     final_sql = transformed.sql()
     

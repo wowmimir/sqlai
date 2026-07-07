@@ -5,6 +5,7 @@ from app.api.v1.datasets import router as datasets_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.query import router as query_router
 from app.api.v1.chat import router as chat_router
+from app.api.v1.cache import router as cache_router
 
 import logging
 
@@ -51,6 +52,11 @@ app.include_router(
 
 app.include_router(
     chat_router, 
+    prefix="/api/v1"
+)
+
+app.include_router(
+    cache_router, 
     prefix="/api/v1"
 )
 

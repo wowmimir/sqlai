@@ -3,3 +3,7 @@
     - current file upload just employs fast apis 40 parallel thread executions to fire up individual threads for each file
 - orphan entry deletion via jobs
 - provide graphing functionality
+- delete rename functionality for projects and datasets
+- table visuals improve
+- once a new chat message is given the previous assistant responses should switch to hydration state so that they can be clicked to get the previous responses
+- error display on frontend a bit ugly
