@@ -1,0 +1,139 @@
+# ============================================
+# Python / Virtual Environment
+# ============================================
+.venv/
+venv/
+env/
+.env.local
+.env.*.local
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# ============================================
+# Development Tools & Configs
+# ============================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+*.log
+*.pid
+*.seed
+*.pid.lock
+*.db
+*.sqlite
+*.sqlite3
+
+# ============================================
+# Version Control
+# ============================================
+.git/
+.gitignore
+.gitattributes
+.gitmodules
+
+# ============================================
+# IDE / Editor Files
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============================================
+# Docker Related
+# ============================================
+Dockerfile
+Dockerfile.dev
+docker-compose.yml
+.dockerignore
+
+# ============================================
+# Environment & Secrets
+# ============================================
+.env
+.env.production
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+
+# ============================================
+# Testing & Debugging
+# ============================================
+test.py
+test_*.py
+*.test.py
+coverage.xml
+*.cover
+
+# ============================================
+# Documentation
+# ============================================
+*.md
+!README.md  # Include README if you want
+docs/
+*.rst
+LICENSE
+
+# ============================================
+# OS Files
+# ============================================
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+
+# ============================================
+# Project Specific
+# ============================================
+todo.md
+*.backup
+*.bak
+.python-version
+alembic/versions/__pycache__/  # Alembic cache
+
+# ============================================
+# Package Manager Files (keep only requirements.txt)
+# ============================================
+pyproject.toml
+uv.lock
+uv.toml
+poetry.lock
+poetry.toml
+Pipfile
+Pipfile.lock
+
+# ============================================
+# Build Outputs
+# ============================================
+*.parquet
+*.csv
+*.xlsx
+data/
+tmp/
+temp/
+
+# ============================================
+# CI/CD
+# ============================================
+.github/
+.gitlab/
+.gitlab-ci.yml
+.travis.yml

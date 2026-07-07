@@ -3,9 +3,19 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BASE_DIR = Path(__file__).resolve().parents[3]
-ENV_FILE = BASE_DIR / ".env"
-
+def get_env_file():
+    # Check multiple possible locations
+    possible_paths = [
+        Path(__file__).resolve().parents[3] / ".env",  # Local: sqlai/.env
+        Path(__file__).resolve().parents[2] / ".env",  # Docker: /app/.env
+        Path.cwd() / ".env",                            # Current working dir
+    ]
+    
+    for path in possible_paths:
+        if path.exists():
+            return path
+    
+    return None
 
 class Settings(BaseSettings):
     """
@@ -16,7 +26,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=ENV_FILE,
+        env_file=get_env_file(),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
