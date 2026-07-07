@@ -7,3 +7,4 @@
 - table visuals improve
 - once a new chat message is given the previous assistant responses should switch to hydration state so that they can be clicked to get the previous responses
 - error display on frontend a bit ugly
+- clicking re run pipeline runs only the latest query and not the specific query that needs to be run

@@ -8,17 +8,26 @@ import { useShallow } from 'zustand/shallow';
 
 export function ChatPanel() {
   const [input, setInput] = useState('');
-const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
+  const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
   const messages = useWorkspaceStore(useShallow((s) => 
     s.activeProjectId ? s.conversationThreads[s.activeProjectId] ?? [] : []
   ));
   const isQueryLoading = useWorkspaceStore((s) => s.isQueryLoading);
   const dispatchTextPrompt = useWorkspaceStore((s) => s.dispatchTextPrompt);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Ref to the viewport (the scrollable container inside ScrollArea)
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when messages or loading state changes
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    // Find the actual scrollable viewport inside ScrollArea
+    if (viewportRef.current) {
+      const viewport = viewportRef.current.querySelector(
+        '[data-radix-scroll-area-viewport]'
+      ) as HTMLElement;
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
   }, [messages, isQueryLoading]);
 
@@ -40,7 +49,12 @@ const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
 
   return (
     <div className="h-full flex flex-col min-h-0 bg-slate-900/20">
-      <ScrollArea className="flex-1" ref={scrollRef}>
+      {/* Scroll area - flex-1 and min-h-0 to allow shrinking */}
+      <ScrollArea 
+        className="flex-1 min-h-0" 
+        ref={viewportRef}
+        // Optional: add a wrapper style to ensure the viewport fills the space
+      >
         <div className="p-4 space-y-3">
           {!activeProjectId ? (
             <div className="text-sm text-slate-500 text-center py-16">
@@ -64,6 +78,7 @@ const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
         </div>
       </ScrollArea>
 
+      {/* Input area - fixed at bottom */}
       <div className="shrink-0 p-4 border-t border-slate-800 bg-slate-900/30">
         <div className="flex gap-2">
           <Textarea
@@ -71,7 +86,7 @@ const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={isDisabled ? 'Waiting for response...' : 'Type analytical prompt...'}
-            className="flex-1 min-h-[60px] resize-none bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-500"
+            className="flex-1 min-h-15 resize-none bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-500"
             disabled={isDisabled}
           />
           <Button

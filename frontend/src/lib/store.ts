@@ -15,9 +15,14 @@ interface WorkspaceState {
   datasetsByProject: Record<string, DatasetAsset[]>;
   conversationThreads: Record<string, ChatMessage[]>;
   activeGridData: TabularDataMatrix | null;
+  cacheMiss: boolean;
+  lastPromptByProject: Record<string, string>;
+
+
 
   setClerkUserId: (id: string | null) => void;
   setEngineWaking: (val: boolean) => void;
+  setCacheMiss: (val: boolean) => void;
   clearUploadError: () => void;
 
   loadProjects: () => Promise<void>;
@@ -42,6 +47,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   datasetsByProject: {},
   conversationThreads: {},
   activeGridData: null,
+  cacheMiss: false,
+  lastPromptByProject: {},
+  setCacheMiss: (val) => set({ cacheMiss: val }),
 
   setClerkUserId: (id) => set({ clerkUserId: id }),
   setEngineWaking: (val) => set({ isEngineWaking: val }),
@@ -59,7 +67,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   setActiveProject: async (projectId) => {
-    set({ activeProjectId: projectId, activeGridData: null, isGridLoading: false });
+    set({
+      activeProjectId: projectId,
+      activeGridData: null,
+      isGridLoading: false,
+      cacheMiss: false, // 👈 Add this
+    });
     if (!projectId) return;
 
     const datasetsLoaded = !!get().datasetsByProject[projectId];
@@ -105,65 +118,85 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   dispatchTextPrompt: async (promptText, projectId) => {
-  const userMsg: ChatMessage = {
-    id: crypto.randomUUID(),
-    role: 'user',
-    content: promptText,
-    created_at: new Date().toISOString(),
-  };
-  const thread = get().conversationThreads[projectId] ?? [];
-  set({
-    conversationThreads: { ...get().conversationThreads, [projectId]: [...thread, userMsg] },
-    isQueryLoading: true,
-    isGridLoading: true,
-    activeGridData: null,
-  });
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: promptText,
+      created_at: new Date().toISOString(),
+    };
+    const thread = get().conversationThreads[projectId] ?? [];
 
-  try {
-    const { data } = await api.post(ENDPOINTS.queryExecute, { project_id: projectId, prompt: promptText });
-    const assistantMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      content: data.message ?? `✅ ${data.rows?.length ?? 0} rows returned`,
-      redis_cache_key: data.redis_cache_key ?? null,
-      created_at: new Date().toISOString(),
-    };
+    // 👇 ADD THIS - store prompt and clear cache miss
     set({
-      conversationThreads: {
-        ...get().conversationThreads,
-        [projectId]: [...get().conversationThreads[projectId], assistantMsg],
+      lastPromptByProject: {
+        ...get().lastPromptByProject,
+        [projectId]: promptText,
       },
-      activeGridData: data.columns && data.rows ? { columns: data.columns, rows: data.rows } : null,
-      isQueryLoading: false,
-      isGridLoading: false,
-    });
-  } catch (err: any) {
-    const detail = err?.response?.data?.detail ?? 'Query failed.';
-    const errorMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'error',
-      content: detail,
-      created_at: new Date().toISOString(),
-    };
-    set({
-      conversationThreads: {
-        ...get().conversationThreads,
-        [projectId]: [...get().conversationThreads[projectId], errorMsg],
-      },
+      cacheMiss: false,
+      conversationThreads: { ...get().conversationThreads, [projectId]: [...thread, userMsg] },
+      isQueryLoading: true,
+      isGridLoading: true,
       activeGridData: null,
-      isQueryLoading: false,
-      isGridLoading: false,
     });
-  }
-},
+
+    try {
+      const { data } = await api.post(ENDPOINTS.queryExecute, { project_id: projectId, prompt: promptText });
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: data.message ?? `✅ ${data.rows?.length ?? 0} rows returned`,
+        redis_cache_key: data.redis_cache_key ?? null,
+        created_at: new Date().toISOString(),
+      };
+      set({
+        conversationThreads: {
+          ...get().conversationThreads,
+          [projectId]: [...get().conversationThreads[projectId], assistantMsg],
+        },
+        activeGridData: data.columns && data.rows ? { columns: data.columns, rows: data.rows } : null,
+        isQueryLoading: false,
+        isGridLoading: false,
+        cacheMiss: false, // 👈 ensure cache miss is cleared on success
+      });
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail ?? 'Query failed.';
+      const errorMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'error',
+        content: detail,
+        created_at: new Date().toISOString(),
+      };
+      set({
+        conversationThreads: {
+          ...get().conversationThreads,
+          [projectId]: [...get().conversationThreads[projectId], errorMsg],
+        },
+        activeGridData: null,
+        isQueryLoading: false,
+        isGridLoading: false,
+        // 👈 DO NOT set cacheMiss here - errors are not cache misses
+      });
+    }
+  },
 
   hydrateGridFromCache: async (cacheKey) => {
-    set({ activeGridData: null, isGridLoading: true }); // NEW: show spinner
+    set({ activeGridData: null, isGridLoading: true, cacheMiss: false });
+
     try {
       const { data } = await api.get(ENDPOINTS.cacheRetrieve(cacheKey));
-      set({ activeGridData: { columns: data.columns, rows: data.rows }, isGridLoading: false });
-    } catch {
-      set({ activeGridData: null, isGridLoading: false }); // NEW: hide spinner on error
+      set({
+        activeGridData: { columns: data.columns, rows: data.rows },
+        isGridLoading: false,
+        cacheMiss: false,
+      });
+    } catch (err: any) {
+      // Check if it's a 404 (cache miss)
+      const is404 = err?.response?.status === 404;
+      set({
+        activeGridData: null,
+        isGridLoading: false,
+        cacheMiss: is404, // 👈 This is what was missing
+      });
     }
   },
 }));

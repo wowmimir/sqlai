@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth} from '@clerk/clerk-react';
+import { useAuth } from '@clerk/clerk-react';
 import { TopNav } from './TopNav';
 import { ProjectSidebar } from '../components/sidebar/ProjectSidebar';
 import { ChatPanel } from '../components/chat/ChatPanel';
@@ -12,11 +12,13 @@ import { bindClerkTokenGetter } from '@/lib/api';
 export function AppShell() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { userId, isSignedIn, getToken} = useAuth();
+  const { userId, isSignedIn, getToken } = useAuth();
   const loadProjects = useWorkspaceStore((s) => s.loadProjects);
   const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
   const setClerkUserId = useWorkspaceStore((s) => s.setClerkUserId);
   const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
+  const isUploading = useWorkspaceStore((s) => s.isUploading);
+  const isEngineWaking = useWorkspaceStore((s) => s.isEngineWaking); // 👈 add this
 
   useEffect(() => {
     setClerkUserId(userId ?? null);
@@ -54,7 +56,19 @@ export function AppShell() {
           <DataStagePanel />
         </div>
       </div>
-      <UploadOverlay />
+      
+      {/* Upload overlay takes priority over engine waking overlay */}
+      {isUploading ? <UploadOverlay /> : null}
+      
+      {/* Engine waking overlay - rendered inline, no separate file needed */}
+      {!isUploading && isEngineWaking && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md">
+          <div className="h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="mt-4 text-sm text-slate-400">
+            Waking up analytical query engines, please hold…
+          </p>
+        </div>
+      )}
     </div>
   );
 }

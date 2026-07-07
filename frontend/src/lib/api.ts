@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useAuth } from '@clerk/clerk-react';
+import { useWorkspaceStore } from './store'; // 👈 add this import at the top
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
@@ -15,6 +15,61 @@ export function bindClerkTokenGetter(fn: () => Promise<string | null>) {
   getTokenFn = fn;
 }
 
+api.interceptors.request.use(async (config) => {
+  if (getTokenFn) {
+    const token = await getTokenFn();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  return config;
+});
+
+
+
+let slowRequestCount = 0;
+const SLOW_THRESHOLD_MS = 3000;
+
+api.interceptors.request.use((config) => {
+  const timeoutId = setTimeout(() => {
+    (config as any ).metadata.timedOut = true;
+    slowRequestCount += 1;
+    useWorkspaceStore.getState().setEngineWaking(true);
+  }, SLOW_THRESHOLD_MS);
+
+  (config as any ).metadata = {
+    timeoutId,
+    timedOut: false,
+  };
+
+  return config;
+});
+
+function handleResponseCleanup(config: any) {
+  if (config?.metadata) {
+    const { timeoutId, timedOut } = config.metadata;
+    if (timeoutId) clearTimeout(timeoutId);
+    if (timedOut) {
+      slowRequestCount -= 1;
+      if (slowRequestCount === 0) {
+        useWorkspaceStore.getState().setEngineWaking(false);
+      }
+    }
+  }
+}
+
+api.interceptors.response.use(
+  (response) => {
+    handleResponseCleanup(response.config);
+    return response;
+  },
+  (error) => {
+    handleResponseCleanup(error.config);
+    return Promise.reject(error);
+  }
+);
+
+// ─── Clerk token interceptor ────────────────────────────────────────────
 api.interceptors.request.use(async (config) => {
   if (getTokenFn) {
     const token = await getTokenFn();

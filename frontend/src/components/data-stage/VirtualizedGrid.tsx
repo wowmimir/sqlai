@@ -27,7 +27,7 @@ export function VirtualizedGrid({ data }: Props) {
           {data.columns.map((col) => (
             <div
               key={col}
-              className="flex-shrink-0 px-4 py-2 text-xs font-medium text-slate-300 uppercase tracking-wider"
+              className="shrink-0 px-4 py-2 text-xs font-medium text-slate-300 uppercase tracking-wider"
               style={{ minWidth: '150px' }}
             >
               {col}
@@ -53,7 +53,7 @@ export function VirtualizedGrid({ data }: Props) {
                 {data.columns.map((col) => (
                   <div
                     key={col}
-                    className="flex-shrink-0 px-4 py-1 text-xs text-slate-300 truncate"
+                    className="shrink-0 px-4 py-1 text-xs text-slate-300 truncate"
                     style={{ minWidth: '150px' }}
                     title={String(row[col] ?? '')} // Show full value on hover
                   >
