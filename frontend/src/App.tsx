@@ -14,7 +14,7 @@ export default function App() {
       <SignedOut>
         <div className="h-screen w-screen flex items-center justify-center bg-slate-950">
           <div className="text-center space-y-4">
-            <h1 className="text-3xl font-bold text-white">DataChat</h1>
+            <h1 className="text-3xl font-bold text-white">SqlAI</h1>
             <p className="text-slate-400">Sign in to access your workspace</p>
             <SignInButton mode="modal">
               <button className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition">
