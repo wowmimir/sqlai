@@ -11,7 +11,7 @@
 
 ## What is SqlAI?
 
-SqlAI is an open-source analytics platform that lets you **upload CSV files and ask questions in plain English** — getting instant answers without writing SQL or paying for expensive cloud data warehouses.
+SqlAI is an analytics platform that lets you **upload CSV files and ask questions in plain English** — getting instant answers without writing SQL or paying for expensive cloud data warehouses.
 
 Think of it as having a data analyst sitting next to you, ready to answer any question about your data in seconds.
 
