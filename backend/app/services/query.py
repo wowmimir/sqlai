@@ -10,10 +10,12 @@ from app.services.duckdb import execute_sql_with_duckdb
 import logging
 from app.services.cache import lookup_semantic_cache,get_cached_result,store_result_cache,generate_cache_key
 from sqlalchemy import func, and_
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_URL = "https://ollama.com/api/generate"
+OLLAMA_API_KEY = settings.OLLAMA_API_KEY
 
 _MUTATING_NODE_TYPES = (
     exp.Insert,
@@ -210,8 +212,15 @@ def generate_sql(prompt: str, model: str = "gemma4:31b-cloud", timeout: int = 12
         "stream": False,
     }
 
+    headers = {
+    "Authorization": f"Bearer {OLLAMA_API_KEY}",
+    "Content-Type": "application/json",
+    }
+
     try:
-        resp = requests.post(OLLAMA_URL, json=payload, timeout=timeout)
+        logger.info(f"Connecting to: {OLLAMA_URL}")  # <-- Add this line
+        logger.info(f"Has API key: {bool(OLLAMA_API_KEY)}")  # <-- And this one
+        resp = requests.post(OLLAMA_URL, json=payload, headers=headers,timeout=timeout)
         # Raise for HTTP errors (4xx, 5xx)
         resp.raise_for_status()
     except requests.exceptions.Timeout as exc:

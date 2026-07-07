@@ -1,0 +1,57 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    container_name: sqlai-backend
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      ENV: development
+
+    env_file:
+      - .env
+
+    volumes:
+      - ./backend:/app
+
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
+
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+    container_name: sqlai-frontend
+
+    ports:
+      - "5173:5173"
+
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+    env_file:
+      - ./frontend/.env
+
+    depends_on:
+      - backend
+
+    command:
+      ["bun", "run", "dev", "--host", "0.0.0.0"]
+
+    restart: unless-stopped
