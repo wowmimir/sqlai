@@ -39,10 +39,14 @@ COPY . .
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Create non-root user
+# Create non-root user with a proper home directory
 RUN addgroup --system --gid 1001 appuser && \
-    adduser --system --uid 1001 --gid 1001 appuser && \
+    adduser --system --uid 1001 --gid 1001 --home /app appuser && \
     chown -R appuser:appuser /app
+
+# 👇 ADD THESE 3 LINES 👇
+RUN mkdir -p /app/.duckdb && chown -R appuser:appuser /app
+ENV HOME=/app
 
 USER appuser
 
