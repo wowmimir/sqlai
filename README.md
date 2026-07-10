@@ -166,7 +166,7 @@ MIT License — use it anywhere, modify it freely, build on top of it.
 ## 🙋 FAQ
 
 **How is this different from ChatGPT + a CSV plugin?**
-SqlAI is purpose-built for analytics. It understands table structures, can join multiple datasets, and renders results in an interactive grid. It's also self-hostable and keeps your data private.
+SqlAI is purpose-built for analytics. It understands table structures, can join multiple datasets, and renders results in an interactive grid. It also keeps your data private.
 
 **Do I need to know SQL?**
 Nope! Just type your question in plain English.
